@@ -395,32 +395,48 @@ The UI connects to `GET /sessions/:id/events` via SSE. The service forwards rele
 
 ## 11. Platform service and deployment
 
+### Harness instance classes
+
+There are two kinds of Staff-X harness instances:
+
+| Instance class | Purpose | Data plane |
+|---|---|---|
+| **Platform Staff-X** | Internal operations, onboarding new tenants, tenant support, platform-level questions | Owns the platform tenant data |
+| **Tenant Staff-X** | One instance per customer tenant; handles that tenant's CRM, sales, finance, signals, tasks, approvals | Owns exactly one tenant's data, fully isolated from other tenants |
+
+The Platform Staff-X instance is provisioned and managed by the platform team. It helps onboard new tenants, answers questions about the platform itself, and operates the platform's internal functions.
+
 ### Control plane vs. data plane
 
 | Platform service | Staff-X harness service |
 |---|---|
 | Manages tenants, users, roles, billing | Runs the agent loop for one tenant |
-| Defines domain model, ontology, integration config | Receives tenant config and boots Cordis context |
-| Provisions/configures harness instances | Executes agents, tasks, signals, approvals |
+| Defines base domain model, ontology templates, integration catalog | Receives tenant-specific config and boots Cordis context |
+| Triggers tenant Postgres DB creation and seeding | Connects to its provisioned logical database |
+| Provisions/configures harness instances (platform + per-tenant) | Executes agents, tasks, signals, approvals |
 | Serves UI config and admin dashboards | Exposes runtime API to UI and external channels |
 | Pushes credentials and provider settings | Consumes credentials via `dsh-credentials` |
 
-### Config flow
+### Tenant provisioning flow
 
 ```text
 Platform service
    ├── creates tenant record
-   ├── defines domain ontology + roles + permissions
-   ├── selects integrations (HubSpot, QuickBooks, Jira, ...)
+   ├── selects tenant domain config (ontology, roles, permissions, integrations)
    ├── stores OAuth/API credentials in its vault
-   └── generates tenant config bundle
+   ├── triggers CNPG Postgres tenant DB creation script
+   │       └── new logical DB created from latest DB image
+   │       └── tenant info seeded (tenant_id, admin user, default roles, base ontology)
+   └── generates tenant config bundle (includes DB connection string)
            │
            ▼
-   Provisions Staff-X harness instance per tenant
+   Provisions Staff-X harness instance for that tenant
            │
            ▼
-   Harness service boots with tenant bundle + Postgres + queue
+   Harness service boots with tenant bundle + logical DB + queue
 ```
+
+When a new tenant is created, the platform service runs a database creation script against the CNPG Postgres cluster. The script creates a fresh logical database from the latest DB image, then seeds it with tenant metadata, an admin user, default roles, and the base ontology. The harness instance is started only after the DB is ready and its connection string is injected into the tenant config bundle.
 
 ### Memory / BI layer
 
@@ -436,18 +452,20 @@ The BI layer owns dashboards; the harness service stays focused on execution.
 
 ### Deployment topology
 
-- One harness pod/container per tenant.
-- Postgres per tenant (or per-tenant schema) for session + domain + task + permission storage.
-- External message queue for signals (SQS/RabbitMQ/Kafka/Postgres queue).
-- Identity gateway terminates auth.
-- Platform service provisions harness pods and pushes config updates.
-- BI sink receives event streams from harness via a plugin or sidecar.
+- **CNPG Postgres cluster** with one logical database per tenant. The platform service creates a new logical DB for each tenant via a DB creation script using the latest DB image.
+- **One harness pod/container per tenant**, plus a **Platform Staff-X harness pod** for internal platform operations.
+- **Tenant data isolation**: each tenant harness instance connects only to its own logical DB; no shared schema.
+- **External message queue** for signals (SQS/RabbitMQ/Kafka/Postgres-backed queue).
+- **Identity gateway** terminates auth.
+- **Platform service** provisions harness pods, creates tenant databases, seeds tenant info, and pushes config updates.
+- **BI sink** receives event streams from harness via a plugin or sidecar.
 
 ### Upgrade path
 
-- Pin `@deepseek-ai/dsh-*` versions in the harness service.
-- Platform service can stage harness versions per tenant or per fleet.
-- Upgrade flow: build new image → canary tenant → validate → fleet-wide rollout.
+- Pin `@deepseek-ai/dsh-*` versions in the harness service image.
+- The platform service stages harness versions for the Platform Staff-X instance first, then per-tenant fleet.
+- Upgrade flow: build new image → deploy to Platform Staff-X → validate → canary tenant → validate → fleet-wide rollout.
+- Tenant DB schema migrations are applied by the platform service using the same DB creation/migration pipeline.
 
 ---
 
@@ -469,8 +487,8 @@ The BI layer owns dashboards; the harness service stays focused on execution.
 ## 13. Open decisions
 
 1. **Signal queue technology:** SQS, RabbitMQ, Kafka, or Postgres-backed queue table?
-2. **Session persistence backend:** Start with SQLite on persistent volume, or implement `session-persistence-postgres` immediately?
-3. **Initial SaaS integrations:** Which two or three integrations (HubSpot, QuickBooks, Jira, Linear, etc.) form the first milestone?
-4. **Identity gateway:** Existing gateway or new sidecar service?
+2. **Initial SaaS integrations:** Which two or three integrations (HubSpot, QuickBooks, Jira, Linear, etc.) form the first milestone?
+3. **Identity gateway:** Existing gateway or new sidecar service?
+4. **Platform Staff-X tenancy model:** Does the Platform Staff-X instance use the same logical DB pattern as tenants, or a dedicated platform DB?
 
 These are implementation-phase decisions and can be resolved in the plan.
