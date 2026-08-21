@@ -103,16 +103,44 @@ Each business function is a harness **capability seam** with three roles: Servic
 
 ### Providers
 
-Each SaaS integration is a provider package that implements one seam:
+Target SaaS integrations use **Nango** for OAuth connection and token management. Each provider package stores a Nango connection reference, resolves the live access token through Nango at execution time, and then calls the SaaS API.
 
-- `provider-hubspot` → registers `crm` provider on `CrmRuntime`
-- `provider-attio` → registers another `crm` provider on `CrmRuntime`
-- `provider-quickbooks` → registers `quickbooks` provider on `FinanceRuntime` and `RevenueRuntime`
-- `provider-intercom` → registers `intercom` provider on `SupportRuntime`
-- `provider-mixpanel` → registers `mixpanel` provider on `AnalyticsRuntime`
-- `provider-jira` / `provider-linear` → register `jira` / `linear` providers on `ProductRuntime`
+| Category | Provider | Nango slug | Seam(s) |
+|---|---|---|---|
+| CRM | HubSpot | `hubspot` | `CrmRuntime` |
+| CRM | Salesforce | `salesforce` | `CrmRuntime` |
+| CRM (sandbox) | Attio | `attio` | `CrmRuntime` |
+| ERP | NetSuite | `netsuite` | `FinanceRuntime`, `RevenueRuntime` |
+| Accounting | QuickBooks | `quickbooks` | `FinanceRuntime`, `RevenueRuntime` |
+| Accounting | Xero | `xero` | `FinanceRuntime`, `RevenueRuntime` |
+| Product analytics | Mixpanel | `mixpanel` | `AnalyticsRuntime`, optionally `ProductRuntime` |
+| Product analytics | Amplitude | `amplitude` | `AnalyticsRuntime`, optionally `ProductRuntime` |
+| Support | Zendesk | `zendesk` | `SupportRuntime` |
+| Support | Intercom | `intercom` | `SupportRuntime` |
+| Project management | Jira | `jira` | `ProductRuntime` |
+| Project management | Linear | `linear` | `ProductRuntime` |
+
+Provider packages:
+
+- `provider-hubspot`, `provider-salesforce`, `provider-attio` → `CrmRuntime`
+- `provider-netsuite`, `provider-quickbooks`, `provider-xero` → `FinanceRuntime`, `RevenueRuntime`
+- `provider-mixpanel`, `provider-amplitude` → `AnalyticsRuntime` (and optionally `ProductRuntime`)
+- `provider-zendesk`, `provider-intercom` → `SupportRuntime`
+- `provider-jira`, `provider-linear` → `ProductRuntime`
+
+Monday and Asana remain future `ProductRuntime` providers.
 
 Providers register as effects and are selected per tenant by the bundle config.
+
+### Nango credential resolver
+
+`staff-core` ships a shared Nango client (or a dedicated `integration-nango` package) used by all providers. It:
+
+- maps tenant + provider to a Nango connection id,
+- fetches and refreshes access tokens through Nango,
+- validates connection health before calls.
+
+Raw OAuth tokens are never stored inside Staff-X; only Nango connection references live in `dsh-credentials` / the platform vault.
 
 ### Consumers
 
