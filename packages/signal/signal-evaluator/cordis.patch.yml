@@ -1,0 +1,31 @@
+# Signal evaluator bundle patch: mounts the @centiv/dsh-signal-evaluator plugin
+# for Centiv signal processing. To use, include this patch in the DSH profile:
+#
+# ```yaml
+# profiles:
+#   signal-evaluator:
+#     parents: [base]
+#     patch: packages/signal/signal-evaluator/cordis.patch.yml
+#     config:
+#       llm:
+#         providers:
+#           openai:
+#             apiKeyEnv: LITELLM_API_KEY
+#             baseURL: http://litellm.platform.svc.cluster.local:4000
+#             models:
+#               - id: gpt-4o-mini
+#                 contextWindow: 128000
+#       signal-evaluator:
+#         provider: openai
+#         model: gpt-4o-mini
+#         maxTokens: 2048
+#         temperature: 0.1
+# ```
+
+- id: signal-evaluator
+  name: '@centiv/dsh-signal-evaluator'
+  config:
+    provider: openai
+    model: gpt-4o-mini
+    maxTokens: 2048
+    temperature: 0.1
