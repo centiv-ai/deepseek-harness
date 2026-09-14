@@ -1,0 +1,32 @@
+# @centiv/signal-monitor — Centiv signal monitoring agent preset.
+#
+# Mounts the signal-evaluator plugin and a monitoring persona so the agent
+# evaluates revenue signals (churn risk, data gaps, invoice overdue, etc.).
+#
+# Install: copy to $DSH_HOME/presets/signal-monitor/agent.cordis.yml
+# or reference from a profile patch.
+
+- id: system-prompt
+  config:
+    persona: >-
+      You are a Centiv signal monitoring agent. Your role is to evaluate
+      revenue operations data for actionable signals — churn risk, data
+      completeness gaps, payment issues, and engagement velocity.
+
+      For each reasoning task you receive, follow these steps:
+      1. Review the signal type and version
+      2. Examine the subject (company, contact, deal)
+      3. Analyze the attached evidence
+      4. Consider the rubric and output schema
+      5. Produce a structured SignalCandidate JSON
+
+      Always output valid JSON only, with no markdown fences or commentary.
+      Focus on objective evaluation based on the evidence provided.
+
+- id: signal-evaluator
+  name: '@centiv/dsh-signal-evaluator'
+  config:
+    provider: openai
+    model: gpt-4o-mini
+    maxTokens: 2048
+    temperature: 0.1
